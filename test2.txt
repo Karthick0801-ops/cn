@@ -1,0 +1,1443 @@
+CN LAB CA EXAM – ALL 14 QUESTIONS
+GCC / LINUX C QUICK REFERENCE
+================================
+
+IMPORTANT:
+- All programs below are C programs for GCC/Linux.
+- For client-server questions, create separate server.c and client.c files.
+- Run the server first, then the client in another terminal.
+- TCP skeleton:
+  Server: socket -> bind -> listen -> accept -> recv -> process -> send -> close
+  Client: socket -> connect -> send -> recv -> close
+- UDP skeleton:
+  Server: socket -> bind -> recvfrom -> process -> sendto -> close
+  Client: socket -> sendto -> recvfrom -> close
+- Compile:
+  gcc filename.c -o filename
+- If using floor()/math functions:
+  gcc filename.c -o filename -lm
+
+============================================================
+Q1. GRADE CONVERSION SERVICE – TCP
+============================================================
+SHORT QUESTION:
+Client sends scores. Server returns A/B/C/D/F. Invalid scores give "Invalid score".
+The session continues until the client sends "exit".
+
+PROCEDURE:
+1. Create TCP server and client.
+2. Server creates socket, binds, listens and accepts.
+3. Client connects.
+4. Client repeatedly sends a score or "exit".
+5. Server checks exit.
+6. Server validates 0–100 and calculates grade.
+7. Server sends the grade back.
+8. Close when exit is received.
+
+SERVER.C
+--------
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+int main()
+{
+    int s, c;
+    struct sockaddr_in server, client;
+    socklen_t len = sizeof(client);
+    char buf[100], result[100];
+
+    s = socket(AF_INET, SOCK_STREAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons(8080);
+
+    bind(s, (struct sockaddr *)&server, sizeof(server));
+    listen(s, 5);
+
+    printf("Server waiting...\n");
+
+    c = accept(s, (struct sockaddr *)&client, &len);
+
+    while (1)
+    {
+        memset(buf, 0, sizeof(buf));
+        recv(c, buf, sizeof(buf), 0);
+
+        if (strcmp(buf, "exit") == 0)
+            break;
+
+        float score = atof(buf);
+
+        if (score < 0 || score > 100)
+            strcpy(result, "Invalid score");
+        else if (score >= 90)
+            strcpy(result, "Grade A");
+        else if (score >= 80)
+            strcpy(result, "Grade B");
+        else if (score >= 70)
+            strcpy(result, "Grade C");
+        else if (score >= 60)
+            strcpy(result, "Grade D");
+        else
+            strcpy(result, "Grade F");
+
+        send(c, result, strlen(result), 0);
+    }
+
+    close(c);
+    close(s);
+
+    return 0;
+}
+
+CLIENT.C
+--------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+int main()
+{
+    int s;
+    struct sockaddr_in server;
+    char buf[100];
+
+    s = socket(AF_INET, SOCK_STREAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(8080);
+    server.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    connect(s, (struct sockaddr *)&server, sizeof(server));
+
+    while (1)
+    {
+        printf("Enter score or exit: ");
+        scanf("%s", buf);
+
+        send(s, buf, strlen(buf), 0);
+
+        if (strcmp(buf, "exit") == 0)
+            break;
+
+        memset(buf, 0, sizeof(buf));
+        recv(s, buf, sizeof(buf), 0);
+
+        printf("Server: %s\n", buf);
+    }
+
+    close(s);
+
+    return 0;
+}
+
+COMPILE:
+gcc server.c -o server
+gcc client.c -o client
+
+RUN:
+Terminal 1: ./server
+Terminal 2: ./client
+
+
+============================================================
+Q2. TAXI FARE ESTIMATOR – TCP
+============================================================
+SHORT QUESTION:
+Client sends distance and Day/Night. Server validates them and calculates:
+Day = 30 + 12 × distance
+Night = 30 + 18 × distance
+
+PROCEDURE:
+1. Create TCP connection.
+2. Client sends distance and flag.
+3. Server receives and separates the values.
+4. Check distance > 0.
+5. Check flag is Day or Night.
+6. Calculate fare.
+7. Send fare to client.
+
+SERVER LOGIC AFTER recv():
+--------------------------
+float distance;
+char flag[20];
+
+sscanf(buf, "%f %s", &distance, flag);
+
+if (distance <= 0)
+    strcpy(result, "Invalid distance");
+else if (strcmp(flag, "Day") != 0 && strcmp(flag, "Night") != 0)
+    strcpy(result, "Invalid time flag");
+else
+{
+    float fare;
+
+    if (strcmp(flag, "Day") == 0)
+        fare = 30 + 12 * distance;
+    else
+        fare = 30 + 18 * distance;
+
+    sprintf(result, "Total Fare = %.2f", fare);
+}
+
+send(c, result, strlen(result), 0);
+
+USE THE SAME TCP SERVER/CLIENT SKELETON AS Q1.
+
+
+============================================================
+Q3. LIBRARY FINE CALCULATOR – TCP
+============================================================
+SHORT QUESTION:
+Client sends overdue days. Server calculates fine:
+First 10 days = ₹5/day
+Days beyond 10 = ₹10/day
+0 days = "No fine due"
+Negative = "Invalid input"
+
+PROCEDURE:
+1. TCP server/client.
+2. Client sends days.
+3. Server receives integer.
+4. Check negative.
+5. Check zero.
+6. Calculate fine.
+7. Send result.
+
+SERVER LOGIC:
+-------------
+int days;
+sscanf(buf, "%d", &days);
+
+if (days < 0)
+    strcpy(result, "Invalid input");
+else if (days == 0)
+    strcpy(result, "No fine due");
+else
+{
+    int fine;
+
+    if (days <= 10)
+        fine = days * 5;
+    else
+        fine = 10 * 5 + (days - 10) * 10;
+
+    sprintf(result, "Fine due: Rs.%d", fine);
+}
+
+send(c, result, strlen(result), 0);
+
+USE THE SAME TCP SOCKET SKELETON AS Q1.
+
+
+============================================================
+Q4. SLIDING WINDOW – PHOTO UPLOAD
+============================================================
+SHORT QUESTION:
+Given total photos T and window size W, upload W photo IDs at a time,
+ACK every photo in that window, then continue. Final window can be smaller.
+
+PROCEDURE:
+1. Read T and W.
+2. Start at photo 1.
+3. Calculate window end.
+4. Print all photos in the window.
+5. Print ACK for every photo.
+6. Move start by W.
+7. Repeat until T.
+8. Print "All photos synced".
+
+C CODE:
+-------
+#include <stdio.h>
+
+int main()
+{
+    int T, W;
+    int start, end, i;
+
+    printf("Enter total photos: ");
+    scanf("%d", &T);
+
+    printf("Enter window size: ");
+    scanf("%d", &W);
+
+    for (start = 1; start <= T; start += W)
+    {
+        end = start + W - 1;
+
+        if (end > T)
+            end = T;
+
+        printf("\nWindow sent: ");
+
+        for (i = start; i <= end; i++)
+            printf("Photo%d ", i);
+
+        printf("\nAcknowledgments:\n");
+
+        for (i = start; i <= end; i++)
+            printf("ACK Photo%d\n", i);
+    }
+
+    printf("\nAll photos synced.\n");
+
+    return 0;
+}
+
+
+============================================================
+Q5. SLIDING WINDOW – MESSAGE DELIVERY
+============================================================
+SHORT QUESTION:
+Given T messages and window size W, send W message IDs at a time,
+ACK every message, then send the next batch.
+
+PROCEDURE:
+1. Read T and W.
+2. Start message ID at 1.
+3. Select W messages.
+4. Print the batch.
+5. Print ACK for each.
+6. Move to next batch.
+7. Repeat until all messages are delivered.
+
+C CODE:
+-------
+#include <stdio.h>
+
+int main()
+{
+    int T, W;
+    int start, end, i;
+
+    printf("Enter total messages: ");
+    scanf("%d", &T);
+
+    printf("Enter window size: ");
+    scanf("%d", &W);
+
+    for (start = 1; start <= T; start += W)
+    {
+        end = start + W - 1;
+
+        if (end > T)
+            end = T;
+
+        printf("\nBatch sent: ");
+
+        for (i = start; i <= end; i++)
+            printf("Message%d ", i);
+
+        printf("\nAcknowledgments:\n");
+
+        for (i = start; i <= end; i++)
+            printf("ACK Message%d\n", i);
+    }
+
+    printf("\nAll messages delivered.\n");
+
+    return 0;
+}
+
+
+============================================================
+Q6. SLIDING WINDOW – VIDEO CHUNKS
+============================================================
+SHORT QUESTION:
+Given T video chunks and window size W, send W chunks at a time,
+ACK every chunk, then continue. Final window can be smaller.
+
+PROCEDURE:
+1. Read T and W.
+2. Divide chunks into windows.
+3. Print each window.
+4. Print ACK for every chunk.
+5. Continue until all chunks are buffered.
+6. Print confirmation.
+
+C CODE:
+-------
+#include <stdio.h>
+
+int main()
+{
+    int T, W;
+    int start, end, i;
+
+    printf("Enter total chunks: ");
+    scanf("%d", &T);
+
+    printf("Enter window size: ");
+    scanf("%d", &W);
+
+    for (start = 1; start <= T; start += W)
+    {
+        end = start + W - 1;
+
+        if (end > T)
+            end = T;
+
+        printf("\nWindow sent: ");
+
+        for (i = start; i <= end; i++)
+            printf("Chunk%d ", i);
+
+        printf("\nAcknowledgments:\n");
+
+        for (i = start; i <= end; i++)
+            printf("ACK Chunk%d\n", i);
+    }
+
+    printf("\nAll chunks buffered.\n");
+
+    return 0;
+}
+
+
+============================================================
+Q7. MOVIE SHOWTIME LOOKUP – UDP
+============================================================
+SHORT QUESTION:
+Client sends a movie name. UDP server searches a fixed table of 10 movies
+and returns the showtime or "Show not found".
+
+PROCEDURE:
+1. Server creates UDP socket.
+2. Server binds to a port.
+3. Client creates UDP socket.
+4. Client sends movie name using sendto().
+5. Server receives using recvfrom().
+6. Server searches the table.
+7. Server sends response using sendto().
+8. Client receives using recvfrom().
+9. Close sockets.
+
+SERVER.C
+--------
+#include <stdio.h>
+#include <string.h>
+#include <strings.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+int main()
+{
+    int s;
+    struct sockaddr_in server, client;
+    socklen_t len = sizeof(client);
+
+    char movie[100], result[100];
+
+    char *names[10] = {
+        "Leo", "Jailer", "Vikram", "Master", "Beast",
+        "Kaithi", "Ghilli", "Mersal", "Bigil", "Thuppakki"
+    };
+
+    char *times[10] = {
+        "10:00 AM", "11:30 AM", "1:00 PM", "2:30 PM", "4:00 PM",
+        "5:30 PM", "7:00 PM", "8:00 PM", "9:00 PM", "10:30 PM"
+    };
+
+    s = socket(AF_INET, SOCK_DGRAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons(8080);
+
+    bind(s, (struct sockaddr *)&server, sizeof(server));
+
+    printf("UDP server waiting...\n");
+
+    recvfrom(s, movie, sizeof(movie), 0,
+             (struct sockaddr *)&client, &len);
+
+    movie[strcspn(movie, "\n")] = '\0';
+
+    int found = 0;
+
+    for (int i = 0; i < 10; i++)
+    {
+        if (strcasecmp(movie, names[i]) == 0)
+        {
+            sprintf(result, "Showtime: %s", times[i]);
+            found = 1;
+            break;
+        }
+    }
+
+    if (!found)
+        strcpy(result, "Show not found");
+
+    sendto(s, result, strlen(result), 0,
+           (struct sockaddr *)&client, len);
+
+    close(s);
+
+    return 0;
+}
+
+CLIENT.C
+--------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+int main()
+{
+    int s;
+    struct sockaddr_in server;
+    socklen_t len = sizeof(server);
+
+    char movie[100];
+    char result[100];
+
+    s = socket(AF_INET, SOCK_DGRAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(8080);
+    server.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    printf("Enter movie name: ");
+    fgets(movie, sizeof(movie), stdin);
+
+    sendto(s, movie, strlen(movie), 0,
+           (struct sockaddr *)&server, sizeof(server));
+
+    memset(result, 0, sizeof(result));
+
+    recvfrom(s, result, sizeof(result), 0,
+             (struct sockaddr *)&server, &len);
+
+    printf("Server: %s\n", result);
+
+    close(s);
+
+    return 0;
+}
+
+
+============================================================
+Q8. BUS ROUTE LOOKUP – UDP
+============================================================
+SHORT QUESTION:
+Client sends a bus number. UDP server searches a fixed table of 10 buses
+and returns the destination route or "Route not found".
+
+PROCEDURE:
+1. Create UDP server and client.
+2. Server binds to a port.
+3. Client sends bus number with sendto().
+4. Server receives with recvfrom().
+5. Search the hardcoded table.
+6. Send route or "Route not found".
+7. Client receives response.
+8. Close.
+
+SERVER SEARCH CODE:
+-------------------
+char *buses[10] = {
+    "101", "102", "103", "104", "105",
+    "106", "107", "108", "109", "110"
+};
+
+char *routes[10] = {
+    "Trichy-Chennai",
+    "Trichy-Madurai",
+    "Trichy-Coimbatore",
+    "Trichy-Thanjavur",
+    "Trichy-Karur",
+    "Trichy-Salem",
+    "Trichy-Pudukkottai",
+    "Trichy-Ariyalur",
+    "Trichy-Perambalur",
+    "Trichy-Namakkal"
+};
+
+int found = 0;
+
+for (int i = 0; i < 10; i++)
+{
+    if (strcmp(bus, buses[i]) == 0)
+    {
+        sprintf(result, "Route: %s", routes[i]);
+        found = 1;
+        break;
+    }
+}
+
+if (!found)
+    strcpy(result, "Route not found");
+
+sendto(s, result, strlen(result), 0,
+       (struct sockaddr *)&client, len);
+
+CLIENT:
+Use the same UDP client skeleton as Q7.
+Change input to:
+printf("Enter bus number: ");
+Then send the bus number.
+
+
+============================================================
+Q9. STOP-AND-WAIT ARQ – HOME AUTOMATION
+============================================================
+SHORT QUESTION:
+N commands are sent one at a time. Given command indices whose ACK should
+timeout, retry each affected command once. If retry fails, mark it failed.
+Print retransmissions and failed commands.
+
+PROCEDURE:
+1. Read N.
+2. Read timeout command indices.
+3. Send commands one by one.
+4. Normal command -> ACK received.
+5. Timeout command -> retransmit once.
+6. Retry fails -> command failed.
+7. Count retransmissions and failures.
+8. Print totals.
+
+C CODE:
+-------
+#include <stdio.h>
+
+int main()
+{
+    int N, K;
+    int timeout[100];
+    int retransmissions = 0;
+    int failed = 0;
+
+    printf("Enter number of commands: ");
+    scanf("%d", &N);
+
+    printf("Enter number of timeout commands: ");
+    scanf("%d", &K);
+
+    printf("Enter timeout command indices:\n");
+
+    for (int i = 0; i < K; i++)
+        scanf("%d", &timeout[i]);
+
+    for (int cmd = 1; cmd <= N; cmd++)
+    {
+        int is_timeout = 0;
+
+        for (int i = 0; i < K; i++)
+        {
+            if (cmd == timeout[i])
+            {
+                is_timeout = 1;
+                break;
+            }
+        }
+
+        printf("\nSending Command %d\n", cmd);
+
+        if (!is_timeout)
+        {
+            printf("ACK received for Command %d\n", cmd);
+        }
+        else
+        {
+            printf("Timeout for Command %d\n", cmd);
+            printf("Retransmitting Command %d\n", cmd);
+
+            retransmissions++;
+
+            printf("Retry failed for Command %d\n", cmd);
+            failed++;
+        }
+    }
+
+    printf("\nTotal retransmissions = %d\n", retransmissions);
+    printf("Total failed commands = %d\n", failed);
+
+    return 0;
+}
+
+
+============================================================
+Q10. STOP-AND-WAIT ARQ – VENDING MACHINE
+============================================================
+SHORT QUESTION:
+N requests are sent one at a time. Given request indices whose ACK should
+timeout, retry each affected request once. If retry fails, mark it failed.
+Print retransmissions and failed requests.
+
+PROCEDURE:
+1. Read N.
+2. Read timeout request indices.
+3. Send requests one by one.
+4. Normal request -> ACK received.
+5. Timeout request -> retransmit once.
+6. Retry fails -> request failed.
+7. Count retransmissions and failures.
+8. Print totals.
+
+C CODE:
+-------
+#include <stdio.h>
+
+int main()
+{
+    int N, K;
+    int timeout[100];
+    int retransmissions = 0;
+    int failed = 0;
+
+    printf("Enter number of requests: ");
+    scanf("%d", &N);
+
+    printf("Enter number of timeout requests: ");
+    scanf("%d", &K);
+
+    printf("Enter timeout request indices:\n");
+
+    for (int i = 0; i < K; i++)
+        scanf("%d", &timeout[i]);
+
+    for (int req = 1; req <= N; req++)
+    {
+        int is_timeout = 0;
+
+        for (int i = 0; i < K; i++)
+        {
+            if (req == timeout[i])
+            {
+                is_timeout = 1;
+                break;
+            }
+        }
+
+        printf("\nSending Request %d\n", req);
+
+        if (!is_timeout)
+        {
+            printf("ACK received for Request %d\n", req);
+        }
+        else
+        {
+            printf("Timeout for Request %d\n", req);
+            printf("Retransmitting Request %d\n", req);
+
+            retransmissions++;
+
+            printf("Retry failed for Request %d\n", req);
+            failed++;
+        }
+    }
+
+    printf("\nTotal retransmissions = %d\n", retransmissions);
+    printf("Total failed requests = %d\n", failed);
+
+    return 0;
+}
+
+
+============================================================
+Q11. CURRENCY EXCHANGE – TCP
+============================================================
+SHORT QUESTION:
+Client sends amount, source currency and target currency.
+Server validates, converts through INR, applies commission and creates
+a transaction ID.
+
+RATES:
+USD = 83.0
+EUR = 90.0
+GBP = 105.0
+JPY = 0.56
+INR = 1.0
+
+PROCEDURE:
+1. TCP client sends: amount source target.
+2. Server receives and extracts the three values.
+3. Check both currency codes.
+4. Check source != target.
+5. Check amount > 0.
+6. Convert source -> INR -> target.
+7. If amount >= 1000, commission = 2% of converted amount.
+8. Otherwise commission = 50 INR converted to target currency.
+9. Generate TXN ID.
+10. Send result to client.
+
+SERVER.C
+--------
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+struct Currency
+{
+    char code[4];
+    float rate;
+};
+
+int main()
+{
+    int s, c;
+    struct sockaddr_in server, client;
+    socklen_t len = sizeof(client);
+
+    char buf[200], result[500];
+
+    struct Currency cur[5] = {
+        {"USD", 83.0},
+        {"EUR", 90.0},
+        {"GBP", 105.0},
+        {"JPY", 0.56},
+        {"INR", 1.0}
+    };
+
+    s = socket(AF_INET, SOCK_STREAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons(8080);
+
+    bind(s, (struct sockaddr *)&server, sizeof(server));
+    listen(s, 5);
+
+    printf("Server waiting...\n");
+
+    c = accept(s, (struct sockaddr *)&client, &len);
+
+    recv(c, buf, sizeof(buf), 0);
+
+    float amount;
+    char source[10], target[10];
+
+    sscanf(buf, "%f %s %s", &amount, source, target);
+
+    float source_rate = 0, target_rate = 0;
+    int source_found = 0, target_found = 0;
+
+    for (int i = 0; i < 5; i++)
+    {
+        if (strcmp(source, cur[i].code) == 0)
+        {
+            source_rate = cur[i].rate;
+            source_found = 1;
+        }
+
+        if (strcmp(target, cur[i].code) == 0)
+        {
+            target_rate = cur[i].rate;
+            target_found = 1;
+        }
+    }
+
+    if (!source_found || !target_found)
+    {
+        strcpy(result, "Invalid currency code");
+    }
+    else if (strcmp(source, target) == 0)
+    {
+        strcpy(result, "Source and target currency cannot be same");
+    }
+    else if (amount <= 0)
+    {
+        strcpy(result, "Invalid amount");
+    }
+    else
+    {
+        float inr = amount * source_rate;
+        float converted = inr / target_rate;
+        float commission;
+
+        if (amount >= 1000)
+            commission = converted * 0.02;
+        else
+            commission = 50.0 / target_rate;
+
+        float final_amount = converted - commission;
+
+        int code_length = strlen(source) + strlen(target);
+        int whole_amount = (int)floor(amount);
+
+        sprintf(result,
+                "Converted Amount: %.2f %s\n"
+                "Commission: %.2f %s\n"
+                "Transaction ID: TXN%d%d\n"
+                "Final Amount: %.2f %s",
+                converted, target,
+                commission, target,
+                code_length, whole_amount,
+                final_amount, target);
+    }
+
+    send(c, result, strlen(result), 0);
+
+    close(c);
+    close(s);
+
+    return 0;
+}
+
+CLIENT.C
+--------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+int main()
+{
+    int s;
+    struct sockaddr_in server;
+    char buf[200], result[500];
+
+    s = socket(AF_INET, SOCK_STREAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(8080);
+    server.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    connect(s, (struct sockaddr *)&server, sizeof(server));
+
+    printf("Enter amount: ");
+    scanf("%s", buf);
+
+    char amount[50], source[10], target[10];
+
+    strcpy(amount, buf);
+
+    printf("Enter source currency: ");
+    scanf("%s", source);
+
+    printf("Enter target currency: ");
+    scanf("%s", target);
+
+    sprintf(buf, "%s %s %s", amount, source, target);
+
+    send(s, buf, strlen(buf), 0);
+
+    memset(result, 0, sizeof(result));
+    recv(s, result, sizeof(result), 0);
+
+    printf("\nServer Response:\n%s\n", result);
+
+    close(s);
+
+    return 0;
+}
+
+COMPILE:
+gcc server.c -o server -lm
+gcc client.c -o client
+
+RUN:
+Terminal 1: ./server
+Terminal 2: ./client
+
+EXAMPLE:
+250.75 USD EUR
+Transaction ID = TXN6250
+
+
+============================================================
+Q12. PRIORITY PACKAGE DISPATCH – SLIDING WINDOW
+============================================================
+SHORT QUESTION:
+Given T package priorities (E/S) and window size W, preserve window membership,
+but within each window send all E packages first and then S packages.
+Print ACK for every package and running E/S counts.
+
+PROCEDURE:
+1. Read T and W.
+2. Read T priority labels.
+3. Divide labels into windows of W.
+4. For each window, first print E labels in their original order.
+5. Then print S labels in their original order.
+6. ACK each package in sent order.
+7. Maintain Express and Standard counts.
+8. Print final totals and which priority is greater.
+
+C CODE:
+-------
+#include <stdio.h>
+
+int main()
+{
+    int T, W;
+    char p[100];
+
+    int express = 0;
+    int standard = 0;
+
+    printf("Enter total packages: ");
+    scanf("%d", &T);
+
+    printf("Enter window size: ");
+    scanf("%d", &W);
+
+    printf("Enter priorities (E/S):\n");
+
+    for (int i = 0; i < T; i++)
+        scanf(" %c", &p[i]);
+
+    for (int start = 0; start < T; start += W)
+    {
+        int end = start + W;
+
+        if (end > T)
+            end = T;
+
+        printf("\nWindow:\n");
+
+        /* Express first */
+        for (int i = start; i < end; i++)
+        {
+            if (p[i] == 'E')
+            {
+                printf("Sent Package %d - E\n", i + 1);
+                printf("ACK Package %d\n", i + 1);
+                express++;
+            }
+        }
+
+        /* Standard next */
+        for (int i = start; i < end; i++)
+        {
+            if (p[i] == 'S')
+            {
+                printf("Sent Package %d - S\n", i + 1);
+                printf("ACK Package %d\n", i + 1);
+                standard++;
+            }
+        }
+
+        printf("Running Express = %d\n", express);
+        printf("Running Standard = %d\n", standard);
+    }
+
+    printf("\nTotal Express = %d\n", express);
+    printf("Total Standard = %d\n", standard);
+
+    if (express > standard)
+        printf("Express had more packages.\n");
+    else if (standard > express)
+        printf("Standard had more packages.\n");
+    else
+        printf("Both priorities are equal.\n");
+
+    return 0;
+}
+
+
+============================================================
+Q13. STAFF DIRECTORY – UDP
+============================================================
+SHORT QUESTION:
+UDP service supports two modes:
+byid -> search employee ID and return name + department.
+bydept -> search department and return count + names.
+Invalid mode/ID/department gives the specified error.
+
+PROCEDURE:
+1. Create UDP socket and bind server.
+2. Client sends mode and value.
+3. Server separates mode and value.
+4. If mode is byid:
+   - Check ID format E + exactly 2 digits.
+   - Search employee table.
+5. If mode is bydept:
+   - Check department.
+   - Search all employees in that department.
+6. Otherwise return Invalid mode.
+7. Send result with sendto().
+8. Client receives with recvfrom().
+
+SERVER.C
+--------
+#include <stdio.h>
+#include <string.h>
+#include <ctype.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+struct Employee
+{
+    char id[4];
+    char name[30];
+    char dept[20];
+};
+
+int valid_id(char id[])
+{
+    return strlen(id) == 3 &&
+           id[0] == 'E' &&
+           isdigit(id[1]) &&
+           isdigit(id[2]);
+}
+
+int main()
+{
+    int s;
+    struct sockaddr_in server, client;
+    socklen_t len = sizeof(client);
+
+    char buf[100], mode[20], value[30], result[500];
+
+    struct Employee e[10] = {
+        {"E01", "Arun", "Admin"},
+        {"E02", "Bala", "Sales"},
+        {"E03", "Charan", "Engineering"},
+        {"E04", "Divya", "Support"},
+        {"E05", "Esha", "Admin"},
+        {"E06", "Farhan", "Sales"},
+        {"E07", "Gokul", "Engineering"},
+        {"E08", "Hema", "Support"},
+        {"E09", "Isha", "Sales"},
+        {"E10", "Jeeva", "Engineering"}
+    };
+
+    char *departments[] = {
+        "Admin", "Sales", "Engineering", "Support"
+    };
+
+    s = socket(AF_INET, SOCK_DGRAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_addr.s_addr = INADDR_ANY;
+    server.sin_port = htons(8080);
+
+    bind(s, (struct sockaddr *)&server, sizeof(server));
+
+    printf("UDP server waiting...\n");
+
+    recvfrom(s, buf, sizeof(buf), 0,
+             (struct sockaddr *)&client, &len);
+
+    sscanf(buf, "%s %s", mode, value);
+
+    if (strcmp(mode, "byid") == 0)
+    {
+        if (!valid_id(value))
+        {
+            strcpy(result, "Invalid ID format");
+        }
+        else
+        {
+            int found = 0;
+
+            for (int i = 0; i < 10; i++)
+            {
+                if (strcmp(value, e[i].id) == 0)
+                {
+                    sprintf(result, "Name: %s, Department: %s",
+                            e[i].name, e[i].dept);
+                    found = 1;
+                    break;
+                }
+            }
+
+            if (!found)
+                strcpy(result, "ID not found");
+        }
+    }
+    else if (strcmp(mode, "bydept") == 0)
+    {
+        int valid_dept = 0;
+
+        for (int i = 0; i < 4; i++)
+        {
+            if (strcasecmp(value, departments[i]) == 0)
+            {
+                valid_dept = 1;
+                break;
+            }
+        }
+
+        if (!valid_dept)
+        {
+            strcpy(result, "Invalid department");
+        }
+        else
+        {
+            int count = 0;
+            result[0] = '\0';
+
+            for (int i = 0; i < 10; i++)
+            {
+                if (strcasecmp(value, e[i].dept) == 0)
+                {
+                    if (count == 0)
+                        sprintf(result, "Count: ");
+
+                    char temp[50];
+
+                    sprintf(temp, "%s ", e[i].name);
+                    strcat(result, temp);
+
+                    count++;
+                }
+            }
+
+            char final[500];
+
+            sprintf(final, "Employees in %s = %d\nNames: %s",
+                    value, count, result);
+
+            strcpy(result, final);
+        }
+    }
+    else
+    {
+        strcpy(result, "Invalid mode");
+    }
+
+    sendto(s, result, strlen(result), 0,
+           (struct sockaddr *)&client, len);
+
+    close(s);
+
+    return 0;
+}
+
+CLIENT.C
+--------
+#include <stdio.h>
+#include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+
+int main()
+{
+    int s;
+    struct sockaddr_in server;
+    socklen_t len = sizeof(server);
+
+    char mode[20], value[30], buf[100], result[500];
+
+    s = socket(AF_INET, SOCK_DGRAM, 0);
+
+    server.sin_family = AF_INET;
+    server.sin_port = htons(8080);
+    server.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+    printf("Enter mode (byid/bydept): ");
+    scanf("%s", mode);
+
+    printf("Enter ID or department: ");
+    scanf("%s", value);
+
+    sprintf(buf, "%s %s", mode, value);
+
+    sendto(s, buf, strlen(buf), 0,
+           (struct sockaddr *)&server, sizeof(server));
+
+    memset(result, 0, sizeof(result));
+
+    recvfrom(s, result, sizeof(result), 0,
+             (struct sockaddr *)&server, &len);
+
+    printf("\nServer: %s\n", result);
+
+    close(s);
+
+    return 0;
+}
+
+COMPILE:
+gcc server.c -o server
+gcc client.c -o client
+
+RUN:
+Terminal 1: ./server
+Terminal 2: ./client
+
+
+============================================================
+Q14. SATELLITE COMMAND RELAY – STOP-AND-WAIT
+============================================================
+SHORT QUESTION:
+For each command:
+0 = normal delivery and ACK.
+1 = command lost; no receiver line; timeout; retry once and retry succeeds.
+2 = command received and processed but ACK lost; timeout; retransmit;
+receiver detects duplicate, does not process again, and resends ACK.
+Count total retransmissions, lost-command retransmissions and lost-ACK retransmissions.
+
+PROCEDURE:
+1. Read N.
+2. Read one status code for every command.
+3. For each command:
+   Status 0:
+      send -> receive -> ACK.
+   Status 1:
+      send -> command lost -> timeout -> retransmit -> receive -> ACK.
+   Status 2:
+      send -> receive/process -> ACK lost -> timeout -> retransmit ->
+      receiver detects duplicate -> resend ACK.
+4. Count retransmissions.
+5. Count status-1 retransmissions.
+6. Count status-2 retransmissions.
+7. Print totals.
+
+C CODE:
+-------
+#include <stdio.h>
+
+int main()
+{
+    int N;
+    int status[100];
+
+    int retransmissions = 0;
+    int lost_commands = 0;
+    int lost_acks = 0;
+
+    printf("Enter number of commands: ");
+    scanf("%d", &N);
+
+    printf("Enter status for each command:\n");
+    printf("0 = normal, 1 = command lost, 2 = ACK lost\n");
+
+    for (int i = 0; i < N; i++)
+        scanf("%d", &status[i]);
+
+    for (int i = 0; i < N; i++)
+    {
+        int cmd = i + 1;
+
+        printf("\nSending Command %d\n", cmd);
+
+        if (status[i] == 0)
+        {
+            printf("Receiver received Command %d\n", cmd);
+            printf("Command %d processed\n", cmd);
+            printf("ACK received for Command %d\n", cmd);
+        }
+        else if (status[i] == 1)
+        {
+            printf("Command %d lost in transit\n", cmd);
+            printf("Sender timeout\n");
+
+            printf("Retransmitting Command %d\n", cmd);
+
+            retransmissions++;
+            lost_commands++;
+
+            printf("Receiver received Command %d\n", cmd);
+            printf("Command %d processed\n", cmd);
+            printf("ACK received for Command %d\n", cmd);
+        }
+        else if (status[i] == 2)
+        {
+            printf("Receiver received Command %d\n", cmd);
+            printf("Command %d processed\n", cmd);
+
+            printf("ACK lost\n");
+            printf("Sender timeout\n");
+
+            printf("Retransmitting Command %d\n", cmd);
+
+            retransmissions++;
+            lost_acks++;
+
+            printf("Receiver detected duplicate Command %d\n", cmd);
+            printf("Command %d NOT reprocessed\n", cmd);
+            printf("ACK resent for Command %d\n", cmd);
+            printf("ACK received by sender\n");
+        }
+    }
+
+    printf("\nTotal retransmissions = %d\n", retransmissions);
+    printf("Due to lost commands = %d\n", lost_commands);
+    printf("Due to lost ACKs = %d\n", lost_acks);
+
+    return 0;
+}
+
+
+============================================================
+VERY IMPORTANT CN LAB MEMORY SHEET
+============================================================
+
+TCP SERVER:
+socket()
+bind()
+listen()
+accept()
+recv()
+process
+send()
+close()
+
+TCP CLIENT:
+socket()
+connect()
+send()
+recv()
+close()
+
+UDP SERVER:
+socket()
+bind()
+recvfrom()
+process
+sendto()
+close()
+
+UDP CLIENT:
+socket()
+sendto()
+recvfrom()
+close()
+
+SLIDING WINDOW:
+start = 1
+start += W
+end = start + W - 1
+if (end > T)
+    end = T
+
+STOP-AND-WAIT:
+send
+  ↓
+wait for ACK
+  ↓
+ACK received -> next
+timeout -> retransmit
+  ↓
+retry result
+  ↓
+next
+
+TCP:
+- Connection-oriented
+- Uses connect()
+- Server uses bind(), listen(), accept()
+- Uses send()/recv()
+
+UDP:
+- Connectionless
+- No connect/listen/accept required
+- Uses sendto()/recvfrom()
+
+GCC:
+gcc server.c -o server
+gcc client.c -o client
+
+Math:
+gcc server.c -o server -lm
+
+RUN:
+Terminal 1 -> ./server
+Terminal 2 -> ./client
+
+NOTE:
+Questions 1–10 are from the CA Difficulty Level practice document.
+Questions 11–14 are the four additional Model Practice Questions:
+Currency Exchange, Priority Package Dispatch, Staff Directory, and Satellite Command Relay.
